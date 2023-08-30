@@ -22,7 +22,7 @@ Suite Setup       Suite Setup Execution
 ${root_cmd_args} =  SEPARATOR=
 ...  redfishtool raw -r ${OPENBMC_HOST}:${HTTPS_PORT} -u ${OPENBMC_USERNAME} -p ${OPENBMC_PASSWORD} -S Always
 ${invalid_value}  abc
-${keybit_length}  2048
+${keybit_length}  ${2048}
 
 *** Test Cases ***
 
@@ -148,7 +148,6 @@ Install Server Certificate Using Redfishtool And Verify Via OpenSSL
 
     ${response}=  Redfishtool Post
     ...  ${payload}  /redfish/v1/CertificateService/Actions/CertificateService.ReplaceCertificate
-    ...  valid_status_codes=${HTTP_OK}, ${HTTP_NO_CONTENT}
 
     Wait Until Keyword Succeeds  2 mins  15 secs  Verify Certificate Visible Via OpenSSL  ${cert_file_path}
 
@@ -401,7 +400,7 @@ Verify Redfishtool Replace Certificate
 
     ${expected_resp}=  Set Variable If
     ...  '${expected_status}' == 'ok'     ${HTTP_OK}, ${HTTP_NO_CONTENT}
-    ...  '${expected_status}' == 'error'  ${HTTP_BAD_REQUEST}
+    ...  '${expected_status}' == 'error'  ${HTTP_NOT_FOUND},${HTTP_INTERNAL_SERVER_ERROR} 
 
     ${response}=  Redfishtool Post
     ...  ${payload}  /redfish/v1/CertificateService/Actions/CertificateService.ReplaceCertificate

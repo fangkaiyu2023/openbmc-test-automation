@@ -33,7 +33,7 @@ Soft Bootme Test
     [Tags]  Soft_Bootme_Test
 
     Printn
-    Rprint Vars  HTX_DURATION  HTX_LOOP
+    Rprint Vars   BOOTME_PERIOD   HTX_LOOP
 
     # Set up the (soft) bootme iteration (loop) counter.
     Set Suite Variable  ${iteration}  ${0}  children=true
@@ -54,14 +54,6 @@ Run HTX Soft Bootme Exerciser
     # - Soft bootme (OS Reboot).
     # - Check HTX status for errors.
 
-    ${runtime}=   Convert Time  ${HTX_DURATION}
-
-    ${startTime} =    Get Current Date
-    Run Keyword If  '${HTX_MDT_PROFILE}' == 'mdt.bu'
-    ...  Create Default MDT Profile
-
-    Run MDT Profile
-
     # **********************************
     # HTX bootme_period:
     #        1 - every 20 minutes
@@ -69,6 +61,22 @@ Run HTX Soft Bootme Exerciser
     #        3 - every hour
     #        4 - every midnight
     # **********************************
+
+    # Set a boot interval based on the given boot me period.
+
+    ${boot_interval}=   Set Variable If
+    ...  ${BOOTME_PERIOD} == 1  20m
+    ...  ${BOOTME_PERIOD} == 2  30m
+    ...  ${BOOTME_PERIOD} == 3  1h
+
+    ${runtime}=  Convert Time  ${boot_interval}
+
+    ${startTime} =    Get Current Date
+    Run Keyword If  '${HTX_MDT_PROFILE}' == 'mdt.bu'
+    ...  Create Default MDT Profile
+
+    Run MDT Profile
+
     Run Soft Bootme  ${BOOTME_PERIOD}
 
     FOR    ${index}    IN RANGE    999999
@@ -77,21 +85,23 @@ Run HTX Soft Bootme Exerciser
 
         IF   '${l_ping}' == '${False}'
             Log to console   ("OS Host is rebooting")
-            # Wait for OS (re) Boot - Max 10 minutes
-            FOR   ${waitindex}   IN RANGE   20
+            # Wait for OS (re) Boot - Max 20 minutes
+            FOR   ${waitindex}   IN RANGE   40
                 Run Key U  Sleep \ 30s
                 ${l_ping}=
                 ...   Run Keyword And Return Status   Ping Host  ${OS_HOST}
                 Exit For Loop If    '${l_ping}' == '${True}'
             END
 
-            Wait Until Keyword Succeeds
-            ...   15 min   30 sec   Verify Ping and REST Authentication
+            Run Keyword If  '${l_ping}' == '${False}'  Fail  msg=OS not pinging in 20 minutes
 
-            # Give OS a minute from first ping for sshd to (re)start
-            Run Key U  Sleep \ 60s
-            OS Execute Command  uptime
-            Check HTX Run Status
+            Wait Until Keyword Succeeds
+            ...   1 min   30 sec   Verify Ping SSH And Redfish Authentication
+
+            Wait Until Keyword Succeeds
+            ...   3x  60 sec  OS Execute Command  uptime
+            Wait Until Keyword Succeeds
+            ...   1 min   30 sec   Check HTX Run Status
 
             Set Suite Variable  ${iteration}  ${iteration + 1}
             ${loop_count}=  Catenate  Completed reboot number: ${iteration}
@@ -108,12 +118,15 @@ Run HTX Soft Bootme Exerciser
     END
 
     Wait Until Keyword Succeeds
-    ...   15 min   30 sec   Verify Ping and REST Authentication
+    ...   15 min   30 sec   Verify Ping SSH And Redfish Authentication
 
-    Shutdown Bootme
+    Wait Until Keyword Succeeds
+    ...   2 min  60 sec   Shutdown Bootme
 
     # If user needs to keep the HTX running to debug on failure or post processing.
-    Run Keyword If  ${HTX_KEEP_RUNNING} == ${0}  Shutdown HTX Exerciser
+    Run Keyword If  ${HTX_KEEP_RUNNING} == ${0}
+    ...  Wait Until Keyword Succeeds
+    ...     2 min  60 sec   Shutdown HTX Exerciser
 
 
 Test Setup Execution
@@ -145,8 +158,8 @@ Test Setup Execution
     # Shutdown if HTX is running.
     ${status}=  Is HTX Running
     Run Keyword If  '${status}' == 'True'
-    ...  Shutdown HTX Exerciser
-
+    ...  Wait Until Keyword Succeeds
+    ...     2 min  60 sec   Shutdown HTX Exerciser
 
 Test Teardown Execution
     [Documentation]  Do the post-test teardown.
@@ -154,7 +167,8 @@ Test Teardown Execution
     # Keep HTX running if user set HTX_KEEP_RUNNING to 1.
     Run Keyword If
     ...  '${TEST_STATUS}' == 'FAIL' and ${HTX_KEEP_RUNNING} == ${0}
-    ...  Shutdown HTX Exerciser
+    ...      Wait Until Keyword Succeeds
+    ...        2 min  60 sec   Shutdown HTX Exerciser
 
     ${keyword_buf}=  Catenate  Stop SOL Console Logging
     ...  \ targ_file_path=${EXECDIR}${/}logs${/}SOL.log
